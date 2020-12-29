@@ -1,0 +1,17 @@
+﻿use path::to::my::file::variable_from_file as var
+
+My_function arg:int, another_arg:str 
+      -- This is comment
+   return another_arg*arg -- Return string 
+
+Another_function arg1:int, arg2:int, arg3:int
+   return arg1 + arg2 + arg3
+
+num = 15
+
+print My_function 
+                 Another_function 
+                                 Another_function num, num, num,
+                                 Another_function num, num, num,
+                                 Another_function num, num, num, 
+                 var
