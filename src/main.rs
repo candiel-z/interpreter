@@ -1,12 +1,31 @@
-use std::{io, io::prelude::*};
-use std::iter::Peekable;
+extern crate itertools;
 
-enum Token {
-	IntegerLiteral(u32),
+use itertools::Itertools;
+use std::{io, io::prelude::*};
+
+enum Operation {
 	Plus,
 	Minus,
 	Multiply,
 	Divide,
+	Equal,
+}
+
+enum Bracket {
+	LeftRound,
+	RightRound,
+	LeftSquare,
+	RightSquare,
+	LeftCurly,
+	RightCurly,
+}
+
+enum Token {
+	IntegerLiteral(f64),
+	StringLiteral(String),
+	Operation(Operation),
+	Bracket(Bracket),
+	Exit,
 }
 
 fn main() {
@@ -20,67 +39,72 @@ fn main() {
     		.read_line(&mut input)
     		.expect("Failed to read line!");
     	input = input.trim().to_string();
-    	println!("{}", calculate(lexer(&input)));
+    	let tokens = match lexer(group_chars(input).unwrap()) {
+    		Ok(value) => value,
+    		Err(err) => { println!("{}", err); continue; },
+    	};
+    	let result = match calculate(tokens) {
+    		Ok(value) => value,
+    		Err(err) => { println!("{}", err); continue; },
+    	};
+    	println!("{}", result);
     }
 }
 
-fn lexer(input: &String) -> Vec<Token> {
+fn group_chars(input: String) -> Option<Vec<String>> {
+	//group input string by types of charaters
+
 	let mut result = Vec::new();
 
-	let mut input_iter = input.chars().peekable();
+	for (_, group) in input.chars().group_by(|c| c.is_digit(10) || *c == '.').into_iter() {
+		for (_, group) in group.collect::<String>().chars().group_by(|c| c.is_alphabetic() || *c == '_').into_iter() {
+			result.push(group.collect::<String>());
+		};
+	};
+	Some(result)
+}
 
-	while let Some(&c) = input_iter.peek() {
-		match c {
-			'0'..='9' => {
-				input_iter.next();
-				let num = get_number(c, &mut input_iter);
-				result.push(Token::IntegerLiteral(num));
-			}
-			'+' => {
-				result.push(Token::Plus);
-				input_iter.next();
+fn lexer(input: Vec<String>) -> Result<Vec<Token>, String> {
+	let mut result = Vec::new();
+
+	for s in input {
+		match s {
+			_ if s.chars().all(|c| c.is_digit(10) || c == '.') => {
+				result.push(Token::IntegerLiteral(s.parse::<f64>().expect("Error.")));
 			},
-			'-' => {
-				result.push(Token::Minus);
-				input_iter.next();
+			_ if s.chars().all(|c| c.is_alphabetic()) => {
+				match s.as_str() {
+					"quit" => result.push(Token::Exit),
+					_ => result.push(Token::StringLiteral(s)),
+				};
 			},
-			'*' => {
-				result.push(Token::Multiply);
-				input_iter.next();
-			},
-			'/' => {
-				result.push(Token::Divide);
-				input_iter.next();
-			}
-			' ' => {
-				input_iter.next();
-			}
-			'q' => {
-				use std::process;
-				process::exit(0x0);
-			}
 			_ => {
-				println!("Unexpected character: {:?}", c);
-				break;
-			}
-		}
-	}
-	result
+				for c in s.chars() {
+					match c {
+						'+' => result.push(Token::Operation(Operation::Plus)),
+						'-' => result.push(Token::Operation(Operation::Minus)),
+						'*' => result.push(Token::Operation(Operation::Multiply)),
+						'/' => result.push(Token::Operation(Operation::Divide)),
+						'=' => result.push(Token::Operation(Operation::Equal)),
+						'(' => result.push(Token::Bracket(Bracket::LeftRound)),
+						')' => result.push(Token::Bracket(Bracket::RightRound)),
+						'[' => result.push(Token::Bracket(Bracket::LeftSquare)),
+						']' => result.push(Token::Bracket(Bracket::RightSquare)),
+						'{' => result.push(Token::Bracket(Bracket::LeftCurly)),
+						'}' => result.push(Token::Bracket(Bracket::RightCurly)),
+						_ => return Err(format!("Unexpected token: {}", c)),
+					};
+				};
+			},
+		};
+	};
+	Ok(result)
 }
 
-fn get_number<T: Iterator<Item = char>>(c: char, iter: &mut Peekable<T>) -> u32 {
-    let mut number = c.to_string().parse::<u32>().expect("The caller should have passed a digit.");
-    while let Some(Ok(digit)) = iter.peek().map(|c| c.to_string().parse::<u32>()) {
-        number = number * 10 + digit;
-        iter.next();
-    }
-    number
-}
+fn calculate(input: Vec<Token>) -> Result<f64, String> {
+	let mut result: f64 = 0.0;
 
-fn calculate (inp: Vec<Token>) -> u32 {
-	let mut result: u32 = 0;
-
-	let mut input = inp.iter().peekable();
+	let mut input = input.iter().peekable();
 
 	while let Some(token) = input.peek() {
 		match token {
@@ -88,35 +112,43 @@ fn calculate (inp: Vec<Token>) -> u32 {
 				result = *i;
 				input.next();
 			},
-			Token::Plus => {
+			Token::StringLiteral(_) => {
+				return Err("".to_string())
+			},
+			Token::Operation(Operation::Plus) => {
 				input.next();
 				result = result + match input.next().unwrap() {
 					Token::IntegerLiteral(i) => i,
-					_ => break,
-					};
+					_ => return Err("Unexpected token!".to_string())
+				};
 			},
-			Token::Minus => {
+			Token::Operation(Operation::Minus) => {
 				input.next();
 				result = result - match input.next().unwrap() {
 					Token::IntegerLiteral(i) => i,
-					_ => break,
-					};
+					_ => return Err("Unexpected token!".to_string())
+				};
 			},
-			Token::Multiply => {
+			Token::Operation(Operation::Multiply) => {
 				input.next();
 				result = result * match input.next().unwrap() {
 					Token::IntegerLiteral(i) => i,
-					_ => break,
-					};
+					_ => return Err("Unexpected token!".to_string())
+				};
 			},
-			Token::Divide => {
+			Token::Operation(Operation::Divide) => {
 				input.next();
 				result = result / match input.next().unwrap() {
 					Token::IntegerLiteral(i) => i,
-					_ => break,
-					};
+					_ => return Err("Unexpected token!".to_string())
+				};
 			},
+			Token::Exit => {
+				use std::process;
+				process::exit(0x0);
+			},
+			_ => return Err("".to_string())
 		};
 	}
-	result
+	Ok(result)
 }
