@@ -1,6 +1,3 @@
-extern crate itertools;
-
-use itertools::Itertools;
 use std::{io, io::prelude::*};
 
 enum Operation {
@@ -26,6 +23,7 @@ enum Token {
 	Operation(Operation),
 	Bracket(Bracket),
 	Exit,
+	EOF,
 }
 
 fn main() {
@@ -39,7 +37,8 @@ fn main() {
     		.read_line(&mut input)
     		.expect("Failed to read line!");
     	input = input.trim().to_string();
-    	let tokens = match lexer(group_chars(input).unwrap()) {
+
+    	let tokens = match lexer(input) {
     		Ok(value) => value,
     		Err(err) => { println!("{}", err); continue; },
     	};
@@ -48,57 +47,62 @@ fn main() {
     		Err(err) => { println!("{}", err); continue; },
     	};
     	println!("{}", result);
+    	
     }
 }
 
-fn group_chars(input: String) -> Option<Vec<String>> {
-	//group input string by types of charaters
-
+fn lexer(input: String) -> Result<Vec<Token>, String> {
 	let mut result = Vec::new();
 
-	for (_, group) in input.chars().group_by(|c| c.is_digit(10) || *c == '.').into_iter() {
-		for (_, group) in group.collect::<String>().chars().group_by(|c| c.is_alphabetic() || *c == '_').into_iter() {
-			result.push(group.collect::<String>());
-		};
-	};
-	Some(result)
-}
+	let mut iter = input.chars().peekable();
 
-fn lexer(input: Vec<String>) -> Result<Vec<Token>, String> {
-	let mut result = Vec::new();
-
-	for s in input {
-		match s {
-			_ if s.chars().all(|c| c.is_digit(10) || c == '.') => {
-				result.push(Token::IntegerLiteral(s.parse::<f64>().expect("Error.")));
-			},
-			_ if s.chars().all(|c| c.is_alphabetic()) => {
-				match s.as_str() {
-					"quit" => result.push(Token::Exit),
-					_ => result.push(Token::StringLiteral(s)),
+	while let Some(c) = iter.peek() {
+		match c {
+			'0'..='9' => {
+				let mut n = String::new();
+				while let Some(c) = iter.peek() {
+					if c.is_digit(10) { 
+						n.push(*c); 
+						iter.next(); 
+					} else { break; }
 				};
+				result.push(Token::IntegerLiteral(n.parse::<f64>().expect("Error.")));
+			},
+			'a'..='z' | 'A'..='Z' | '_' => {
+				let mut s = String::new();
+				while let Some(c) = iter.peek() {
+					if c.is_alphabetic() { 
+						s.push(*c); 
+						iter.next();
+					} else { break; }
+				};
+				result.push(Token::StringLiteral(s));
 			},
 			_ => {
-				for c in s.chars() {
-					match c {
-						'+' => result.push(Token::Operation(Operation::Plus)),
-						'-' => result.push(Token::Operation(Operation::Minus)),
-						'*' => result.push(Token::Operation(Operation::Multiply)),
-						'/' => result.push(Token::Operation(Operation::Divide)),
-						'=' => result.push(Token::Operation(Operation::Equal)),
-						'(' => result.push(Token::Bracket(Bracket::LeftRound)),
-						')' => result.push(Token::Bracket(Bracket::RightRound)),
-						'[' => result.push(Token::Bracket(Bracket::LeftSquare)),
-						']' => result.push(Token::Bracket(Bracket::RightSquare)),
-						'{' => result.push(Token::Bracket(Bracket::LeftCurly)),
-						'}' => result.push(Token::Bracket(Bracket::RightCurly)),
-						_ => return Err(format!("Unexpected token: {}", c)),
-					};
+				match c {
+					'+' => result.push(Token::Operation(Operation::Plus)),
+					'-' => result.push(Token::Operation(Operation::Minus)),
+					'*' => result.push(Token::Operation(Operation::Multiply)),
+					'/' => result.push(Token::Operation(Operation::Divide)),
+					'=' => result.push(Token::Operation(Operation::Equal)),
+					'(' => result.push(Token::Bracket(Bracket::LeftRound)),
+					')' => result.push(Token::Bracket(Bracket::RightRound)),
+					'[' => result.push(Token::Bracket(Bracket::LeftSquare)),
+					']' => result.push(Token::Bracket(Bracket::RightSquare)),
+					'{' => result.push(Token::Bracket(Bracket::LeftCurly)),
+					'}' => result.push(Token::Bracket(Bracket::RightCurly)),
+					_ => return Err(format!("Unexpected token: {}", c)),
 				};
+				iter.next();
 			},
 		};
 	};
+
 	Ok(result)
+}
+
+fn parser(tokens: Vec<Token>) -> () {
+
 }
 
 fn calculate(input: Vec<Token>) -> Result<f64, String> {
@@ -115,33 +119,39 @@ fn calculate(input: Vec<Token>) -> Result<f64, String> {
 			Token::StringLiteral(_) => {
 				return Err("".to_string())
 			},
-			Token::Operation(Operation::Plus) => {
-				input.next();
-				result = result + match input.next().unwrap() {
-					Token::IntegerLiteral(i) => i,
-					_ => return Err("Unexpected token!".to_string())
-				};
-			},
-			Token::Operation(Operation::Minus) => {
-				input.next();
-				result = result - match input.next().unwrap() {
-					Token::IntegerLiteral(i) => i,
-					_ => return Err("Unexpected token!".to_string())
-				};
-			},
-			Token::Operation(Operation::Multiply) => {
-				input.next();
-				result = result * match input.next().unwrap() {
-					Token::IntegerLiteral(i) => i,
-					_ => return Err("Unexpected token!".to_string())
-				};
-			},
-			Token::Operation(Operation::Divide) => {
-				input.next();
-				result = result / match input.next().unwrap() {
-					Token::IntegerLiteral(i) => i,
-					_ => return Err("Unexpected token!".to_string())
-				};
+			Token::Operation(op) => match op {
+				Operation::Plus => {
+					input.next();
+					result = result + match input.next() {
+						Some(Token::IntegerLiteral(i)) => i,
+						_ => return Err(format!("Unexpected token: ")),
+					};
+				},
+				Operation::Minus => {
+					input.next();
+					result = result - match input.next() {
+						Some(Token::IntegerLiteral(i)) => i,
+						_ => return Err(format!("Unexpected token: ")),
+					};					
+				},
+				Operation::Multiply => {
+					input.next();
+					result = result * match input.next() {
+						Some(Token::IntegerLiteral(i)) => i,
+						_ => return Err(format!("Unexpected token: ")),
+					};
+				},
+				Operation::Divide => {
+					input.next();
+					result = result / match input.next() {
+						Some(Token::IntegerLiteral(i)) => i,
+						_ => return Err(format!("Unexpected token: ")),
+					};
+				},
+				Operation::Equal => {
+					input.next();
+					
+				},
 			},
 			Token::Exit => {
 				use std::process;
