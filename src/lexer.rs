@@ -38,6 +38,8 @@ pub enum Keyword {
 	Return,
 	Import,
 	As,
+	And,
+	Or,
 }
 
 #[derive(Debug)]
@@ -109,21 +111,20 @@ pub fn lexer(input: String) -> Result<Vec<Token>, String> {
 	 				Some(c) => c,
 	 				None => return Err(format!("Unexpected character: {}", ' ')),
 	 			};
-	 			if iter.peek() == Some(&'\'') {
-	 				result.push(Token::Literal(Literal::Char(c)));
-	 			} else {
-	 				match iter.peek() {
-	 					Some(c) => return Err(format!("Unexpected character: {}", c)),
-	 					None => return Err(format!("Unexpected character: {}", ' ')),
-	 				};
+	 			match iter.peek() {
+	 				Some(&'\'') => result.push(Token::Literal(Literal::Char(c))),
+	 				_ => return Err(format!("Unexpected character: {}", iter.peek().unwrap_or(&' '))),
 	 			};
 	 			iter.next();
 	 		},
 	 		'"' => {
-	 			let mut s: Vec<char> = Vec::new();
+	 			let mut s = String::new();
 	 			while let Some(c) = iter.next() {
 	 				match c {
-	 					'"' => result.push(Token::Literal(Literal::String(s.iter().collect()))),
+	 					'"' => {
+	 						result.push(Token::Literal(Literal::String(s)));
+	 						break;
+	 					},
 	 					_ => s.push(c),
 	 				};
 	 			};
@@ -177,7 +178,7 @@ pub fn lexer(input: String) -> Result<Vec<Token>, String> {
 	 			};
 	 		},
 	 		'0'..='9' => {
-	 			let mut n = Vec::new();
+	 			let mut n = String::new();
 	 			let mut is_float = false;
 
 	 			n.push(c);
@@ -196,21 +197,23 @@ pub fn lexer(input: String) -> Result<Vec<Token>, String> {
 	 					_ => break,
 	 				};
 	 			};
-	 			let n = n.into_iter().collect::<String>();
-				if is_float {
-					result.push(Token::Literal(Literal::Float(n
-						.parse::<f64>()
-						.expect("Could not parse number")
-						)));
-				} else {
-					result.push(Token::Literal(Literal::Integer(n
-						.parse::<i64>()
-						.expect("Could not parse number")
-						)));
-				};
+	 			match is_float {
+	 				true => {
+	 					result.push(Token::Literal(Literal::Float(n
+							.parse::<f64>()
+							.expect("Could not parse number")
+							)));
+	 				},
+	 				false => {
+	 					result.push(Token::Literal(Literal::Integer(n
+							.parse::<i64>()
+							.expect("Could not parse number")
+							)));
+	 				},
+	 			};
 	 		},
 	 		'a'..='z' | 'A'..='Z' | '_' => {
-	 			let mut s = Vec::new();
+	 			let mut s = String::new();
 
 	 			s.push(c);
 
@@ -224,9 +227,7 @@ pub fn lexer(input: String) -> Result<Vec<Token>, String> {
 	 				};
 	 			};
 
-	 			let s = s.into_iter().collect::<String>();
-
-	 			match &*s {
+	 			match s.as_str() {
 	 				"if" => result.push(Token::Keyword(Keyword::If)),
 	 				"else" => result.push(Token::Keyword(Keyword::Else)),
 	 				"elif" => result.push(Token::Keyword(Keyword::Elif)),
@@ -236,6 +237,8 @@ pub fn lexer(input: String) -> Result<Vec<Token>, String> {
 	 				"return" => result.push(Token::Keyword(Keyword::Return)),
 	 				"import" => result.push(Token::Keyword(Keyword::Import)),
 	 				"as" => result.push(Token::Keyword(Keyword::As)),
+	 				"and" => result.push(Token::Keyword(Keyword::And)),
+	 				"or" => result.push(Token::Keyword(Keyword::Or)),
 	 				"true" => result.push(Token::Literal(Literal::Bool(true))),
 	 				"false" => result.push(Token::Literal(Literal::Bool(false))),
 	 				_ => result.push(Token::Literal(Literal::Identifier(s))),
